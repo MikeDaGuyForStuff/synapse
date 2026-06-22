@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1A1B1E;
+}
+::-webkit-scrollbar-thumb {
+  background: #373A40;
+  border-radius: 3px;
+}
+
+/* Synaptic pulse animation */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.synapse-pulse {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Memory type badges */
+.badge-episodic {
+  background: #4c6ef5;
+  color: white;
+}
+.badge-semantic {
+  background: #40c057;
+  color: white;
+}
+.badge-procedural {
+  background: #f59f00;
+  color: black;
+}
