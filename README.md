@@ -1,4 +1,4 @@
-# SYNAPSE — Memory Layer for AI
+# SYNAPSE — AI Never Forgets
 
 ![PyPI](https://img.shields.io/pypi/v/synapse-memory)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -11,30 +11,40 @@ from synapse import MemoryEngine
 
 engine = MemoryEngine()
 engine.store("Every AI forgets everything. SYNAPSE fixes that.")
-results = engine.retrieve("AI memory")
+print(engine.context("AI memory")["context_block"])
 ```
 
-SYNAPSE is a persistent, self-organizing memory engine that any AI model can plug into. It gives AI true long-term memory — persistent, private, and gets smarter over time. No cloud, no subscription, no vendor lock-in.
+SYNAPSE is a persistent, self-organizing memory engine for any AI model. It gives AI true long-term memory — persistent, private, and gets smarter over time. No cloud, no subscription, no vendor lock-in.
 
 Built for AI agents, chatbots, and any application where context needs to survive beyond a single session.
 
 ---
 
-## Why does this exist?
+## The Revolution: AI Should Never Forget
 
-Every AI today — Claude, GPT, Gemini, local models — forgets everything the moment a conversation ends. Developers hack around this with naive solutions: stuffing chat history into prompts, basic vector databases, simple key-value stores. None of these work like human memory. None self-organize. None learn what matters and forget what doesn't.
+Human brains forget. **AI shouldn't.**
 
-SYNAPSE solves this at the architecture level.
+Every memory system today uses some form of forgetting — delete old data, prune rarely accessed items, apply a decay threshold. This is wrong. It's copying human biology instead of improving on it.
 
-## Architecture
+SYNAPSE uses **progressive compression** instead of deletion:
 
-SYNAPSE mirrors how human memory actually works with 3 memory types:
+```
+RAW ──► COMPRESSED ──► KNOWLEDGE ──► IDENTITY
+(single facts) → (summaries) → (patterns) → (stable truths)
+```
 
-- **Episodic** — things that happened ("user mentioned they have a dog")
-- **Semantic** — facts and knowledge ("user's name is Alex, they are a developer")
-- **Procedural** — how to do things ("user prefers concise responses")
+1. Everything starts at **RAW** — verbatim, exactly what happened
+2. Old/low-priority RAW memories get **COMPRESSED** into summaries
+3. COMPRESSED clusters get **EXTRACTED** into KNOWLEDGE facts
+4. Established facts become part of **IDENTITY** — the stable user model
 
-The engine self-organizes through periodic consolidation: merging duplicates, promoting frequently accessed memories, applying decay to old ones, and extracting semantic facts from episodic patterns.
+**Nothing is ever deleted.** Total storage grows forever. Retrieval stays fast because compressed representations are smaller and more meaningful. The system gets smarter with more data.
+
+> This is how Claude handles 200K tokens of context — not by forgetting, but by managing information efficiently. SYNAPSE brings this same philosophy to your own AI stack.
+
+## Live Demo
+
+Try it: start the API, open `demo/chat.html` in a browser, add your API key, and talk to an AI. Watch memories appear as nodes on the graph in real time. Toggle memory off to see what the AI forgets.
 
 ## Quick Start
 
@@ -47,7 +57,7 @@ pip install synapse-memory
 pip install synapse-memory[embeddings]
 ```
 
-> **⚠️ Without sentence-transformers, SYNAPSE falls back to 128-dim hash embeddings.** Retrieval quality will be noticeably poor. Always install `[embeddings]` for real use. The fallback works for development/testing only.
+> **⚠️ Without sentence-transformers, SYNAPSE falls back to 128-dim hash embeddings.** Retrieval quality will be noticeably poor. Always install `[embeddings]` for real use.
 
 ### Use it
 
@@ -56,24 +66,24 @@ from synapse import MemoryEngine
 
 engine = MemoryEngine()
 
-# Store memories
-engine.store("The user loves building AI infrastructure", source="conversation", tags=["user"])
-engine.store("The user prefers dark mode with purple accents", source="conversation", tags=["preference"])
+# Store — everything is remembered forever
+engine.store("Mike loves building AI infrastructure", source="conversation")
+engine.store("Mike prefers dark mode with purple accents", source="conversation")
 
-# Retrieve what's relevant
+# Retrieve — searches all layers (raw, compressed, knowledge, identity)
 results = engine.retrieve("user preferences", top_k=5)
 for r in results:
-    print(f"[{r['combined_score']:.2f}] {r['memory']['content']}")
+    print(f"[{r['layer']}] {r['memory']['content']}")
 
-# Consolidate — self-organize
-engine.consolidate()
+# Compress — transforms old RAW memories into COMPRESSED summaries
+engine.compress()
 
-# Forget what doesn't matter
-engine.forget(threshold=0.1)
+# Extract — finds patterns and promotes to KNOWLEDGE layer
+engine.extract()
 
-# Reflect — get a rich context block for any AI prompt
-reflection = engine.reflect("user")
-print(reflection["context_block"])
+# Context — get an optimized context block ready for any LLM prompt
+ctx = engine.context("user preferences")
+print(ctx["context_block"])
 ```
 
 ### Start the API
@@ -90,60 +100,96 @@ npm install
 npm run dev
 ```
 
+### Run the Demo
+
+Open `demo/chat.html` in any browser while the API is running. Talk to an AI. Watch its memory grow.
+
+### Or use Docker
+
+```bash
+docker compose up
+```
+
+This starts the API (port 8742), dashboard (port 5173), and demo (port 8080) — one command, everything running.
+
+## The Context Function — Your LLM Integration
+
+`engine.context(query)` is the single function you call to integrate SYNAPSE with any AI model:
+
+```python
+# Before sending a prompt to Claude/GPT/local model:
+ctx = engine.context("what the user was working on")
+
+# Inject ctx["context_block"] into your system prompt
+# SYNAPSE handles: what to retrieve, what layer to use,
+# how to format, token budget management
+system_prompt = f"""
+You are a helpful assistant with persistent memory.
+
+{ctx['context_block']}
+
+Respond to the user naturally, referencing relevant memories.
+"""
+```
+
+The context block is formatted as structured XML, organized by layer (identity → knowledge → summaries → recent), and includes a token estimate so you know it fits.
+
 ## Dashboard
 
-The SYNAPSE dashboard is a React + D3 interface that lets you see your AI's memory in real time — a force-directed graph of memory connections, importance heatmap, timeline of what was learned, and search.
-
 ![SYNAPSE Dashboard](dashboard-screenshot.png)
+
+React + D3 interface showing your AI's memory as a force-directed graph. Nodes are sized by importance, colored by memory type (episodic/semantic/procedural), and connected by relevance links. Switch between Graph, Timeline, Cards, and Reflect tabs.
+
+## Architecture
+
+**4 Memory Layers** (never delete, only promote):
+
+| Layer | Description | Persistence |
+|-------|-------------|-------------|
+| RAW | Verbatim facts and events | Until compressed (7+ days) |
+| COMPRESSED | Summaries of related RAW memories | Until promoted (30+ days) |
+| KNOWLEDGE | Extracted patterns and facts | Until abstracted (90+ days) |
+| IDENTITY | Stable user model | Forever |
+
+**3 Memory Types** (mirror human cognition):
+
+- **Episodic** — things that happened
+- **Semantic** — facts and knowledge  
+- **Procedural** — how to do things
+
+**Importance Scoring** — each memory scored 0.0–1.0 based on named entities, user preferences, connectivity, access frequency.
+
+**Compression Priority** — determines which memories to compress next, based on age, access frequency, and importance. Frequently accessed memories stay raw longer. Old, rarely accessed memories get compressed first.
 
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/memory` | Store a new memory |
-| GET | `/memory/retrieve` | Query relevant memories |
-| POST | `/memory/consolidate` | Trigger consolidation |
-| POST | `/memory/forget` | Forget decayed memories |
-| GET | `/memory/reflect` | Synthesize memories on a topic |
+| POST | `/memory` | Store a new memory (RAW layer) |
+| GET | `/memory/retrieve` | Search all memory layers |
+| POST | `/memory/compress` | Compress RAW → COMPRESSED summaries |
+| POST | `/memory/extract` | Extract COMPRESSED → KNOWLEDGE facts |
+| GET | `/memory/context` | Generate optimized LLM context block |
 | DELETE | `/memory/{id}` | Delete a specific memory |
-| GET | `/memory/stats` | Memory health statistics |
+| GET | `/memory/stats` | Memory health + layer breakdown |
 | GET | `/health` | Health check |
-
-## How it works
-
-**Importance Scoring** — each memory is scored 0.0–1.0 based on named entities, user preferences, connectivity, access frequency, and recency.
-
-**The Forgetting Curve** — inspired by Ebbinghaus, memories decay at different rates per type:
-
-```python
-current_importance = base × e^(-decay_rate × days_since_access)
-```
-
-Episodic: 0.01/day | Semantic: 0.001/day | Procedural: 0.0001/day
-
-**Consolidation** — the self-organizing step. Merges duplicates, promotes important memories, extracts semantic facts from episodic patterns.
-
-> **Note:** Fact extraction (`consolidate()`) requires real usage over time. Memories are only promoted to semantic facts after 3+ accesses, so it won't trigger on a first run. Give it conversations, then consolidate — it gets smarter with use.
 
 ## Project Structure
 
 ```
 synapse/
-├── synapse/            # Core library
-│   ├── store.py        # SQLite persistence
-│   ├── engine.py       # Store, retrieve, consolidate, forget, reflect
-│   ├── embeddings.py   # Local embedding generation
-│   ├── importance.py   # Importance scoring heuristics
-│   ├── decay.py        # Ebbinghaus forgetting curve
-│   └── types.py        # Memory data model
-├── api/                # FastAPI layer
-│   ├── main.py
-│   ├── schemas.py
-│   └── routes/
-│       ├── memory.py
-│       └── health.py
-├── dashboard/          # React + D3 dashboard
-└── examples/           # Usage examples
+├── synapse/           # Core library
+│   ├── engine.py      # Store, retrieve, compress, extract, context
+│   ├── store.py       # SQLite persistence (4 layers)
+│   ├── types.py       # Memory model with compression hierarchy
+│   ├── embeddings.py  # Local embedding generation
+│   ├── importance.py  # Importance scoring
+│   └── decay.py       # Compression scheduling
+├── api/               # FastAPI layer
+├── dashboard/         # React + D3 visualization
+├── demo/              # Chat demo (single HTML file)
+├── examples/          # Usage examples
+└── tests/             # 21 tests, all passing
 ```
 
 ## License
@@ -155,3 +201,5 @@ MIT — free for any use, personal or commercial.
 **One person built this. One weekend. No permission needed.**
 
 [GitHub](https://github.com/MikeDaGuyForStuff/synapse) — built by MikeDaGuyForStuff
+
+*"AI should never forget. It should only understand better."*

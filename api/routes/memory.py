@@ -1,4 +1,4 @@
-"""Memory API routes."""
+"""Memory API routes — no forgetting, only compression."""
 
 from __future__ import annotations
 
@@ -8,9 +8,10 @@ from api.main import get_engine
 from api.schemas import (
     StoreMemoryRequest,
     RetrieveRequest,
-    ForgetRequest,
-    ReflectRequest,
-    ConsolidateResponse,
+    ContextRequest,
+    CompressResponse,
+    ExtractResponse,
+    ContextResponse,
     MemoryResponse,
     StatsResponse,
 )
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/memory", tags=["memory"])
 
 @router.post("", response_model=MemoryResponse)
 def store_memory(req: StoreMemoryRequest, eng: MemoryEngine = Depends(get_engine)):
-    """Store a new memory."""
+    """Store a new memory. All memories start at the RAW layer."""
     mem_id = eng.store(
         content=req.content,
         source=req.source,
@@ -43,7 +44,7 @@ def retrieve_memories(
     min_score: float = 0.0,
     eng: MemoryEngine = Depends(get_engine),
 ):
-    """Retrieve memories relevant to a query."""
+    """Retrieve memories across all layers (raw, compressed, knowledge, identity)."""
     mtype = None
     if memory_type:
         try:
@@ -53,57 +54,65 @@ def retrieve_memories(
     return eng.retrieve(query=query, top_k=top_k, memory_type=mtype, min_score=min_score)
 
 
-@router.post("/consolidate", response_model=ConsolidateResponse)
-def consolidate_memories(eng: MemoryEngine = Depends(get_engine)):
-    """Trigger manual consolidation."""
-    result = eng.consolidate()
-    return ConsolidateResponse(**result)
-
-
-@router.post("/forget")
-def forget_memories(
-    req: ForgetRequest,
+@router.post("/compress", response_model=CompressResponse)
+def compress_memories(
+    target_count: int = 10,
     eng: MemoryEngine = Depends(get_engine),
 ):
-    """Forget memories below the importance threshold."""
-    count = eng.forget(threshold=req.threshold)
-    return {"forgotten": count, "threshold": req.threshold}
+    """Compress old RAW memories into COMPRESSED summaries.
+    Nothing is deleted — memories are promoted to higher layers."""
+    result = eng.compress(target_count=target_count)
+    return CompressResponse(**result)
 
 
-@router.get("/reflect")
-def reflect_on_topic(
-    topic: str,
-    top_k: int = 15,
+@router.post("/extract", response_model=ExtractResponse)
+def extract_knowledge(eng: MemoryEngine = Depends(get_engine)):
+    """Extract KNOWLEDGE facts from clusters of COMPRESSED memories."""
+    result = eng.extract()
+    return ExtractResponse(**result)
+
+
+@router.get("/context", response_model=ContextResponse)
+def get_context(
+    query: str,
+    max_tokens: int = 4000,
     eng: MemoryEngine = Depends(get_engine),
 ):
-    """Get a synthesized memory summary on a topic."""
-    return eng.reflect(topic=topic, top_k=top_k)
+    """Generate an optimized context block ready to inject into any LLM prompt.
+    Searches all memory layers and formats the most relevant information."""
+    return eng.context(query=query, max_tokens=max_tokens)
 
 
 @router.delete("/{memory_id}")
 def delete_memory(memory_id: str, eng: MemoryEngine = Depends(get_engine)):
     """Delete a specific memory by ID."""
-    deleted = eng._store.delete(memory_id)
-    if not deleted:
+    mem = eng._store.get(memory_id)
+    if not mem:
         raise HTTPException(404, f"Memory {memory_id} not found")
+    # In a true never-forget system this wouldn't exist,
+    # but providing it for manual cleanup
+    # Use SQLite DELETE to actually remove it
+    import sqlite3
+    conn = sqlite3.connect(eng._store.db_path)
+    conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+    conn.commit()
+    conn.close()
     return {"deleted": True, "id": memory_id}
 
 
 @router.get("/stats", response_model=StatsResponse)
 def memory_stats(eng: MemoryEngine = Depends(get_engine)):
-    """Get memory health statistics."""
+    """Get memory health statistics — layer breakdown, type breakdown, totals."""
     all_mems = eng._store.all()
+    layer_breakdown = eng._store.count_by_layer()
+    type_breakdown = eng._store.count_by_type()
 
-    type_breakdown = {"episodic": 0, "semantic": 0, "procedural": 0}
-    total_imp = 0.0
-    total_links = 0
-    for m in all_mems:
-        type_breakdown[m.memory_type.value] = type_breakdown.get(m.memory_type.value, 0) + 1
-        total_imp += m.importance_score
-        total_links += len(m.linked_memories)
+    total_imp = sum(m.importance_score for m in all_mems)
+    total_links = sum(len(m.linked_memories) for m in all_mems)
 
     return StatsResponse(
         total_memories=len(all_mems),
+        layer_breakdown=layer_breakdown,
         type_breakdown=type_breakdown,
         avg_importance=round(total_imp / len(all_mems), 4) if all_mems else 0.0,
         total_links=total_links,

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -22,40 +21,51 @@ class RetrieveRequest(BaseModel):
     min_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum relevance score")
 
 
-class ConsolidateResponse(BaseModel):
-    merged: int
-    promoted: int
-    decayed: int
-    extracted_facts: int
-    before_count: int
-    after_count: int
+class ContextRequest(BaseModel):
+    query: str = Field(..., description="Query or topic to generate context for")
+    max_tokens: int = Field(default=4000, ge=100, le=32000, description="Target max context size")
 
 
-class ForgetRequest(BaseModel):
-    threshold: float = Field(default=0.1, ge=0.0, le=1.0, description="Importance threshold for forgetting")
+class CompressResponse(BaseModel):
+    compressed_groups: int
+    raw_memories_compressed: int
+    summaries_created: int
 
 
-class ReflectRequest(BaseModel):
-    topic: str = Field(..., description="Topic or question to reflect on")
-    top_k: int = Field(default=15, ge=1, le=100, description="Number of memories to consider")
+class ExtractResponse(BaseModel):
+    extracted: int
+
+
+class ContextResponse(BaseModel):
+    query: str
+    has_memories: bool
+    total_memories_found: int
+    layers_used: list[str]
+    layer_breakdown: dict
+    token_estimate: int
+    fits_in_context: bool
+    context_block: str
 
 
 class MemoryResponse(BaseModel):
     id: str
     content: str
     memory_type: str
+    layer: str
     importance_score: float
     created_at: str
     last_accessed_at: str
     access_count: int
-    decay_rate: float
     tags: list[str]
     source: str
     linked_memories: list[str]
+    compressed_from: list[str]
+    parent_id: Optional[str] = None
 
 
 class StatsResponse(BaseModel):
     total_memories: int
+    layer_breakdown: dict
     type_breakdown: dict
     avg_importance: float
     total_links: int

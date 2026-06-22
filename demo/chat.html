@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SYNAPSE — AI Memory Demo</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+  background: #0d0d0f;
+  color: #e0e0e0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Layout */
+.app { display: flex; flex-direction: column; height: 100vh; }
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 24px; background: #141517; border-bottom: 1px solid #2a2a2e;
+  flex-shrink: 0;
+}
+.header-left { display: flex; align-items: center; gap: 12px; }
+.logo {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: linear-gradient(135deg, #6c5ce7, #a855f7);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 14px; color: white;
+}
+.header h1 { font-size: 18px; font-weight: 700; color: #f0f0f0; }
+.header .subtitle { font-size: 12px; color: #666; }
+.connection-status {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; padding: 4px 12px;
+  border-radius: 20px; background: #1a1a1e;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot.online { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+.dot.offline { background: #ef4444; }
+
+.main {
+  display: flex; flex: 1; overflow: hidden;
+}
+
+/* Chat Panel */
+.chat-panel {
+  width: 45%; display: flex; flex-direction: column;
+  border-right: 1px solid #2a2a2e; background: #0d0d0f;
+}
+.api-key-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; background: #141517;
+  border-bottom: 1px solid #2a2a2e; flex-shrink: 0;
+}
+.api-key-bar label { font-size: 11px; color: #666; white-space: nowrap; }
+.api-key-bar input {
+  flex: 1; background: #1a1a1e; border: 1px solid #2a2a2e;
+  border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #e0e0e0;
+  font-family: monospace;
+}
+.api-key-bar input:focus { outline: none; border-color: #6c5ce7; }
+.api-key-bar select {
+  background: #1a1a1e; border: 1px solid #2a2a2e; border-radius: 6px;
+  padding: 6px 10px; font-size: 12px; color: #e0e0e0;
+}
+.memory-toggle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; background: #141517;
+  border-bottom: 1px solid #2a2a2e; flex-shrink: 0;
+}
+.toggle-switch {
+  width: 40px; height: 22px; background: #333; border-radius: 11px;
+  cursor: pointer; position: relative; transition: background 0.2s;
+  flex-shrink: 0;
+}
+.toggle-switch.active { background: #6c5ce7; }
+.toggle-switch::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 18px; height: 18px; background: white; border-radius: 50%;
+  transition: transform 0.2s;
+}
+.toggle-switch.active::after { transform: translateX(18px); }
+.toggle-label { font-size: 13px; color: #999; }
+.toggle-label.active { color: #a78bfa; font-weight: 600; }
+.toggle-hint { font-size: 11px; color: #555; margin-left: auto; }
+
+/* Messages */
+.messages {
+  flex: 1; overflow-y: auto; padding: 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.message {
+  max-width: 85%; padding: 10px 14px; border-radius: 12px;
+  font-size: 13px; line-height: 1.5; animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; } }
+.message.user {
+  align-self: flex-end; background: #6c5ce7; color: white;
+  border-bottom-right-radius: 4px;
+}
+.message.assistant {
+  align-self: flex-start; background: #1a1a1e; color: #e0e0e0;
+  border: 1px solid #2a2a2e; border-bottom-left-radius: 4px;
+}
+.message.system {
+  align-self: center; background: #1a1a1e88; color: #888;
+  font-size: 11px; padding: 6px 12px; border-radius: 20px;
+  border: 1px solid #2a2a2e;
+}
+.message .label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 4px; opacity: 0.6;
+}
+.message .memory-context {
+  font-size: 11px; color: #a78bfa; margin-top: 6px;
+  padding: 6px 8px; background: #1a1a1e88; border-radius: 6px;
+  border-left: 2px solid #6c5ce7;
+}
+.memory-hit {
+  display: inline-block; font-size: 10px; padding: 1px 6px;
+  border-radius: 10px; background: #6c5ce722; color: #a78bfa;
+  margin-right: 4px;
+}
+.typing {
+  align-self: flex-start; display: flex; align-items: center;
+  gap: 4px; padding: 12px 16px;
+}
+.typing span {
+  width: 8px; height: 8px; background: #555; border-radius: 50%;
+  animation: bounce 1.4s infinite ease-in-out;
+}
+.typing span:nth-child(1) { animation-delay: 0s; }
+.typing span:nth-child(2) { animation-delay: 0.2s; }
+.typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-8px); }
+}
+
+/* Input */
+.input-bar {
+  display: flex; gap: 8px; padding: 12px 16px;
+  background: #141517; border-top: 1px solid #2a2a2e;
+  flex-shrink: 0;
+}
+.input-bar textarea {
+  flex: 1; background: #1a1a1e; border: 1px solid #2a2a2e;
+  border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #e0e0e0;
+  resize: none; min-height: 42px; max-height: 120px;
+  font-family: inherit; line-height: 1.4;
+}
+.input-bar textarea:focus { outline: none; border-color: #6c5ce7; }
+.input-bar textarea::placeholder { color: #555; }
+.btn-send {
+  width: 42px; height: 42px; border-radius: 10px; border: none;
+  background: #6c5ce7; color: white; font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s; flex-shrink: 0;
+}
+.btn-send:hover { background: #7c6cf7; }
+.btn-send:disabled { background: #333; cursor: not-allowed; }
+
+/* Graph Panel */
+.graph-panel {
+  flex: 1; display: flex; flex-direction: column; position: relative;
+}
+.graph-panel .graph-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px; background: #141517;
+  border-bottom: 1px solid #2a2a2e; flex-shrink: 0;
+}
+.graph-header h2 { font-size: 13px; font-weight: 600; color: #999; }
+.graph-header .stats { display: flex; gap: 16px; font-size: 11px; color: #666; }
+.graph-header .stats span { display: flex; align-items: center; gap: 4px; }
+.graph-header .stats .num { color: #e0e0e0; font-weight: 600; }
+#memory-graph { flex: 1; background: #0d0d0f; }
+
+/* Empty state */
+.empty-state {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  text-align: center; color: #444; pointer-events: none;
+}
+.empty-state svg { width: 64px; height: 64px; stroke: #333; margin-bottom: 12px; }
+.empty-state h3 { font-size: 16px; color: #666; margin-bottom: 4px; }
+.empty-state p { font-size: 12px; color: #444; }
+
+/* Memory flash animation */
+@keyframes nodeAppear {
+  from { r: 0; opacity: 0; }
+  to { opacity: 1; }
+}
+.node-new circle { animation: nodeAppear 0.5s ease-out; }
+
+/* Memory count badge */
+.memory-count {
+  font-size: 11px; padding: 2px 8px; border-radius: 10px;
+  background: #6c5ce722; color: #a78bfa; font-weight: 500;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #0d0d0f; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .main { flex-direction: column; }
+  .chat-panel { width: 100%; height: 50vh; border-right: none; border-bottom: 1px solid #2a2a2e; }
+  .graph-panel { height: 50vh; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">S</div>
+      <div>
+        <h1>SYNAPSE <span style="font-weight:400;color:#666;font-size:14px;">AI Memory Demo</span></h1>
+        <div class="subtitle">Watch an AI build and retrieve memories in real time</div>
+      </div>
+    </div>
+    <div class="connection-status" id="connection-status">
+      <span class="dot offline" id="conn-dot"></span>
+      <span id="conn-text">Connecting...</span>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- Chat Panel -->
+    <div class="chat-panel">
+      <!-- API Key -->
+      <div class="api-key-bar">
+        <label>LLM API Key:</label>
+        <input type="password" id="api-key" placeholder="sk-ant-... or sk-..." />
+        <select id="api-provider">
+          <option value="anthropic">Anthropic Claude</option>
+          <option value="openai">OpenAI GPT</option>
+        </select>
+      </div>
+
+      <!-- Memory Toggle -->
+      <div class="memory-toggle">
+        <div class="toggle-switch active" id="memory-toggle" onclick="toggleMemory()"></div>
+        <span class="toggle-label active" id="memory-label">Memory Active</span>
+        <span class="toggle-hint">Toggle to compare AI with vs without memory</span>
+      </div>
+
+      <!-- Messages -->
+      <div class="messages" id="messages">
+        <div class="message system">
+          Welcome to the SYNAPSE demo. Type a message to start a conversation.
+          With memory on, every message is stored and recalled as context.
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="input-bar">
+        <textarea id="chat-input" rows="1" placeholder="Type a message..." 
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
+        <button class="btn-send" id="send-btn" onclick="sendMessage()">→</button>
+      </div>
+    </div>
+
+    <!-- Graph Panel -->
+    <div class="graph-panel">
+      <div class="graph-header">
+        <h2>SYNAPSE Memory Graph</h2>
+        <div class="stats">
+          <span>Total <span class="num" id="mem-total">0</span></span>
+          <span style="color:#6c5ce7;">● Raw <span class="num" id="mem-raw">0</span></span>
+          <span style="color:#22c55e;">● Compressed <span class="num" id="mem-compressed">0</span></span>
+          <span style="color:#eab308;">● Knowledge <span class="num" id="mem-knowledge">0</span></span>
+          <span style="color:#f472b6;">● Identity <span class="num" id="mem-identity">0</span></span>
+        </div>
+      </div>
+      <div id="memory-graph"></div>
+      <div class="empty-state" id="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M3 12h3m0 0a3 3 0 015.25-2.25M6 12a3 3 0 015.25 2.25M6 12h3m6 0h3m0 0a3 3 0 01-5.25 2.25M18 12a3 3 0 01-5.25-2.25M18 12h3"/>
+          <circle cx="12" cy="12" r="9" opacity="0.3"/>
+        </svg>
+        <h3>Memories will appear here</h3>
+        <p>Start a conversation with memory active to see the graph grow</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIGURATION
+// ============================================================
+const SYNAPSE_API = window.location.origin + '/api';
+
+// ============================================================
+// STATE
+// ============================================================
+let memoryOn = true;
+let isSending = false;
+let memories = [];
+const conversationId = 'demo-' + Date.now();
+let memoryStats = { total: 0, episodic: 0, semantic: 0, procedural: 0 };
+
+// Graph state
+let graphData = { nodes: [], links: [] };
+let simulation = null;
+let svg = null;
+
+// ============================================================
+// API: SYNAPSE
+// ============================================================
+async function synapseHealth() {
+  try {
+    const res = await fetch(SYNAPSE_API + '/health');
+    if (!res.ok) throw new Error('not ok');
+    return await res.json();
+  } catch { return null; }
+}
+
+async function storeMemory(content, source, tags = []) {
+  try {
+    const res = await fetch(SYNAPSE_API + '/memory', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, source: source || 'chat-demo', tags })
+    });
+    if (res.ok) {
+      const mem = await res.json();
+      await refreshMemories();
+      return mem;
+    }
+  } catch { return null; }
+}
+
+async function retrieveMemories(query, topK = 10) {
+  try {
+    const res = await fetch(SYNAPSE_API + '/memory/retrieve?query=' + encodeURIComponent(query) + '&top_k=' + topK);
+    if (res.ok) return await res.json();
+  } catch { return []; }
+  return [];
+}
+
+async function refreshMemories() {
+  try {
+    // Fetch stats
+    const statsRes = await fetch(SYNAPSE_API + '/memory/stats');
+    if (statsRes.ok) {
+      const stats = await statsRes.json();
+      memoryStats = {
+        total: stats.total_memories,
+        raw: stats.layer_breakdown?.raw || 0,
+        compressed: stats.layer_breakdown?.compressed || 0,
+        knowledge: stats.layer_breakdown?.knowledge || 0,
+        identity: stats.layer_breakdown?.identity || 0,
+      };
+      updateStats();
+    }
+    // Fetch memories for graph
+    const memsRes = await fetch(SYNAPSE_API + '/memory/retrieve?query=&top_k=100');
+    if (memsRes.ok) {
+      const results = await memsRes.json();
+      memories = results.map(r => r.memory || r);
+      updateGraph();
+    }
+  } catch {}
+}
+
+// ============================================================
+// API: LLM
+// ============================================================
+async function getLLMResponse(messages, contextBlock = null) {
+  const apiKey = document.getElementById('api-key').value.trim();
+  const provider = document.getElementById('api-provider').value;
+  
+  if (!apiKey) {
+    addMessage('Please enter your API key first.', 'system');
+    return null;
+  }
+
+  let systemPrompt = 'You are a helpful AI assistant with a memory system called SYNAPSE.';
+  if (contextBlock && memoryOn) {
+    systemPrompt += '\n\nYou have a memory system. Here is what you remember about the user:\n' + contextBlock;
+    systemPrompt += '\n\nUse these memories to provide personalized, context-aware responses. If the user asks about something you remember, reference it naturally.';
+  }
+
+  try {
+    if (provider === 'anthropic') {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages: messages.map(m => ({ role: m.role, content: m.content }))
+        })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        addMessage('API Error: ' + (err.substring(0, 200)), 'system');
+        return null;
+      }
+      const data = await res.json();
+      return data.content?.[0]?.text || null;
+    } else {
+      // OpenAI
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + apiKey
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          max_tokens: 1024,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...messages.map(m => ({ role: m.role, content: m.content }))
+          ]
+        })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        addMessage('API Error: ' + (err.substring(0, 200)), 'system');
+        return null;
+      }
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || null;
+    }
+  } catch (e) {
+    addMessage('Network Error: ' + e.message, 'system');
+    return null;
+  }
+}
+
+// ============================================================
+// CHAT
+// ============================================================
+let chatHistory = [];
+
+function addMessage(content, role, opts = {}) {
+  const container = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'message ' + role;
+  
+  if (role === 'system') {
+    div.textContent = content;
+  } else {
+    let html = '';
+    if (opts.memoryHit) {
+      html += '<div class="label">' + role + ' <span class="memory-hit">🧠 memory recalled</span></div>';
+    } else {
+      html += '<div class="label">' + role + '</div>';
+    }
+    html += content;
+    if (opts.contextBlock) {
+      html += '<div class="memory-context">📚 ' + opts.contextBlock + '</div>';
+    }
+    div.innerHTML = html;
+  }
+  
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text || isSending) return;
+  
+  input.value = '';
+  isSending = true;
+  document.getElementById('send-btn').disabled = true;
+  
+  // Add user message
+  addMessage(text, 'user');
+  chatHistory.push({ role: 'user', content: text });
+  
+  // Show typing indicator
+  const container = document.getElementById('messages');
+  const typing = document.createElement('div');
+  typing.className = 'typing message';
+  typing.id = 'typing';
+  typing.innerHTML = '<span></span><span></span><span></span>';
+  container.appendChild(typing);
+  container.scrollTop = container.scrollHeight;
+  
+  // Store user message as memory
+  if (memoryOn) {
+    await storeMemory(text, 'user-message', ['conversation', 'demo']);
+  }
+  
+  // Retrieve relevant memories
+  let contextBlock = null;
+  let memoryHit = false;
+  if (memoryOn) {
+    const ctx = await retrieveContext(text);
+    if (ctx && ctx.has_memories) {
+      memoryHit = true;
+      contextBlock = ctx.context_block;
+    }
+  }
+  
+  // Get LLM response
+  const response = await getLLMResponse(chatHistory, contextBlock);
+  
+  // Remove typing indicator
+  const typingEl = document.getElementById('typing');
+  if (typingEl) typingEl.remove();
+  
+  if (response) {
+    // Store AI response as memory
+    if (memoryOn) {
+      await storeMemory('AI responded about: ' + text.substring(0, 100), 'ai-response', ['conversation', 'demo', 'ai']);
+    }
+    
+    addMessage(response, 'assistant', {
+      memoryHit,
+      contextBlock: memoryHit ? 'Retrieved ' + (contextBlock?.split('\n').length || 0) + ' relevant memories' : null
+    });
+    chatHistory.push({ role: 'assistant', content: response });
+  } else {
+    addMessage('Sorry, I encountered an error. Check your API key and try again.', 'system');
+  }
+  
+  isSending = false;
+  document.getElementById('send-btn').disabled = false;
+  input.focus();
+  
+  // Trim chat history
+  if (chatHistory.length > 20) {
+    // Keep system message + last 20
+    while (chatHistory.length > 20) {
+      chatHistory.shift();
+    }
+  }
+}
+
+function toggleMemory() {
+  memoryOn = !memoryOn;
+  const toggle = document.getElementById('memory-toggle');
+  const label = document.getElementById('memory-label');
+  toggle.classList.toggle('active');
+  label.classList.toggle('active');
+  label.textContent = memoryOn ? 'Memory Active' : 'Memory Off';
+  
+  addMessage(
+    memoryOn 
+      ? 'Memory enabled. Every message is now stored and recalled as context.'
+      : 'Memory disabled. The AI will respond without any remembered context.',
+    'system'
+  );
+}
+
+// ============================================================
+// GRAPH
+// ============================================================
+function initGraph() {
+  const container = document.getElementById('memory-graph');
+  const rect = container.getBoundingClientRect();
+  const width = rect.width || 800;
+  const height = rect.height || 500;
+  
+  svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .style('background', '#0d0d0f');
+  
+  const g = svg.append('g');
+  
+  svg.call(d3.zoom()
+    .scaleExtent([0.2, 4])
+    .on('zoom', (event) => g.attr('transform', event.transform))
+  );
+  
+  simulation = d3.forceSimulation()
+    .force('link', d3.forceLink().id(d => d.id).distance(100))
+    .force('charge', d3.forceManyBody().strength(-150))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide(35))
+    .on('tick', ticked);
+  
+  graphData.g = g;
+  
+  function ticked() {
+    g.selectAll('.link')
+      .attr('x1', d => d.source.x)
+      .attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x)
+      .attr('y2', d => d.target.y);
+    g.selectAll('.node')
+      .attr('transform', d => `translate(${d.x},${d.y})`);
+  }
+}
+
+function updateGraph() {
+  if (!simulation || !graphData.g) return;
+  
+  const g = graphData.g;
+  const mems = memories;
+  
+  const typeColors = {
+    episodic: '#6c5ce7',
+    semantic: '#22c55e',
+    procedural: '#eab308',
+  };
+  
+  // Build nodes
+  const nodes = mems.map((m, i) => ({
+    id: m.id || i,
+    label: (m.content || '').substring(0, 35),
+    type: m.memory_type || 'episodic',
+    importance: m.importance_score || 0.5,
+  }));
+  
+  // Build links from linked_memories
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const links = [];
+  mems.forEach(m => {
+    (m.linked_memories || []).forEach(lid => {
+      if (nodeIds.has(lid)) {
+        links.push({ source: m.id, target: lid });
+      }
+    });
+  });
+  
+  // Create some links if none exist
+  if (links.length === 0 && nodes.length > 1) {
+    for (let i = 1; i < nodes.length; i++) {
+      links.push({ source: nodes[i-1].id, target: nodes[i].id });
+    }
+  }
+  
+  // Update simulation
+  simulation.nodes(nodes);
+  simulation.force('link').links(links);
+  simulation.alpha(1).restart();
+  
+  // Links
+  const link = g.selectAll('.link')
+    .data(links, d => d.source.id + '-' + d.target.id);
+  link.exit().remove();
+  link.enter()
+    .append('line')
+    .attr('class', 'link')
+    .attr('stroke', '#2a2a2e')
+    .attr('stroke-width', 1)
+    .attr('stroke-opacity', 0.5);
+  
+  // Nodes
+  const node = g.selectAll('.node')
+    .data(nodes, d => d.id);
+  
+  const nodeEnter = node.enter()
+    .append('g')
+    .attr('class', 'node')
+    .style('cursor', 'pointer')
+    .call(d3.drag()
+      .on('start', (event, d) => {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+      })
+      .on('drag', (event, d) => {
+        d.fx = event.x;
+        d.fy = event.y;
+      })
+      .on('end', (event, d) => {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+      })
+    );
+  
+  nodeEnter.append('circle')
+    .attr('class', 'node-circle')
+    .attr('r', d => 6 + d.importance * 10)
+    .attr('fill', d => typeColors[d.type] || '#6c5ce7')
+    .attr('opacity', 0.85)
+    .attr('stroke', d => d3.color(typeColors[d.type] || '#6c5ce7').brighter(0.5))
+    .attr('stroke-width', 1.5);
+  
+  nodeEnter.append('text')
+    .attr('class', 'node-label')
+    .text(d => d.label)
+    .attr('x', 0)
+    .attr('y', d => -(8 + d.importance * 10))
+    .attr('text-anchor', 'middle')
+    .attr('fill', '#888')
+    .attr('font-size', 10)
+    .attr('font-family', 'Inter, sans-serif');
+  
+  node.exit().remove();
+  
+  // Update existing nodes
+  node.select('.node-circle')
+    .attr('r', d => 6 + d.importance * 10)
+    .attr('fill', d => typeColors[d.type] || '#6c5ce7');
+  
+  node.select('.node-label').text(d => d.label);
+  
+  // Hide empty state when we have memories
+  const emptyState = document.getElementById('empty-state');
+  if (emptyState) {
+    emptyState.style.display = mems.length > 0 ? 'none' : 'block';
+  }
+}
+
+function updateStats() {
+  document.getElementById('mem-total').textContent = memoryStats.total;
+  document.getElementById('mem-raw').textContent = memoryStats.raw || 0;
+  document.getElementById('mem-compressed').textContent = memoryStats.compressed || 0;
+  document.getElementById('mem-knowledge').textContent = memoryStats.knowledge || 0;
+  document.getElementById('mem-identity').textContent = memoryStats.identity || 0;
+}
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  initGraph();
+  
+  // Check SYNAPSE connection
+  const health = await synapseHealth();
+  const dot = document.getElementById('conn-dot');
+  const text = document.getElementById('conn-text');
+  
+  if (health) {
+    dot.className = 'dot online';
+    text.textContent = 'SYNAPSE • ' + health.memories_stored + ' memories';
+  } else {
+    dot.className = 'dot offline';
+    text.textContent = 'SYNAPSE offline — start the API server';
+  }
+  
+  // Load existing memories
+  await refreshMemories();
+  
+  // Auto-focus input
+  document.getElementById('chat-input').focus();
+  
+  // Handle resize for graph
+  window.addEventListener('resize', () => {
+    const container = document.getElementById('memory-graph');
+    const rect = container.getBoundingClientRect();
+    if (svg) {
+      svg.attr('width', rect.width).attr('height', rect.height);
+      if (simulation) {
+        simulation.force('center', d3.forceCenter(rect.width / 2, rect.height / 2));
+        simulation.alpha(0.3).restart();
+      }
+    }
+  });
+}
+
+// Start
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

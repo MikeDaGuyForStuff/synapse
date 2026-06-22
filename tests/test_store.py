@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 from synapse.store import MemoryStore
-from synapse.types import Memory, MemoryType
+from synapse.types import Memory, MemoryType, MemoryLayer
 
 
 class TestMemoryStore:
@@ -25,6 +25,7 @@ class TestMemoryStore:
         assert retrieved.content == "hello world"
         assert retrieved.tags == ["test"]
         assert retrieved.id == mid
+        assert retrieved.layer == MemoryLayer.RAW
 
     def test_update(self):
         m = Memory(content="original")
@@ -37,13 +38,6 @@ class TestMemoryStore:
         assert updated.content == "updated"
         assert updated.importance_score == 0.9
 
-    def test_delete(self):
-        m = Memory(content="to delete")
-        mid = self.store.insert(m)
-        assert self.store.delete(mid) is True
-        assert self.store.get(mid) is None
-        assert self.store.delete("nonexistent") is False
-
     def test_count_and_all(self):
         assert self.store.count() == 0
         self.store.insert(Memory(content="a"))
@@ -51,12 +45,33 @@ class TestMemoryStore:
         assert self.store.count() == 2
         assert len(self.store.all()) == 2
 
-    def test_memory_types(self):
+    def test_count_by_layer(self):
+        self.store.insert(Memory(content="raw mem"))
+        self.store.insert(Memory(content="compressed mem", layer=MemoryLayer.COMPRESSED))
+        layers = self.store.count_by_layer()
+        assert layers.get("raw", 0) >= 1
+        assert layers.get("compressed", 0) >= 1
+
+    def test_count_by_type(self):
         self.store.insert(Memory(content="ep", memory_type=MemoryType.EPISODIC))
         self.store.insert(Memory(content="sem", memory_type=MemoryType.SEMANTIC))
-        self.store.insert(Memory(content="pro", memory_type=MemoryType.PROCEDURAL))
-        all_mem = self.store.all()
-        types = [m.memory_type for m in all_mem]
-        assert MemoryType.EPISODIC in types
-        assert MemoryType.SEMANTIC in types
-        assert MemoryType.PROCEDURAL in types
+        types = self.store.count_by_type()
+        assert types.get("episodic", 0) >= 1
+        assert types.get("semantic", 0) >= 1
+
+    def test_filter_by_layer(self):
+        self.store.insert(Memory(content="r1"))
+        self.store.insert(Memory(content="r2"))
+        c = Memory(content="c1", layer=MemoryLayer.COMPRESSED)
+        self.store.insert(c)
+        raw = self.store.all(layer=MemoryLayer.RAW)
+        compressed = self.store.all(layer=MemoryLayer.COMPRESSED)
+        assert len(raw) >= 2
+        assert len(compressed) >= 1
+
+    def test_compressed_from_and_parent(self):
+        m = Memory(content="child", compressed_from=["a", "b"], parent_id="parent123")
+        mid = self.store.insert(m)
+        retrieved = self.store.get(mid)
+        assert retrieved.compressed_from == ["a", "b"]
+        assert retrieved.parent_id == "parent123"
